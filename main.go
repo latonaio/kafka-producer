@@ -19,7 +19,7 @@ import (
 var msName string = "kafka-producer"
 
 type kafkaConfig struct {
-	kafkaAddr string `envconfig:"KAFKA_SERVER" default:"localhost:10001"`
+	addr string `envconfig:"KAFKA_SERVER" default:"localhost:9092"`
 }
 
 type kafkaMsg struct {
@@ -52,7 +52,7 @@ func kanbanToKafkaMsg(kanban *msclient.WrapKanban) (*kafkaMsg, error) {
 	}, nil
 }
 
-func produce(ctx context.Context, dataCh <-chan *msclient.WrapKanban, addr string) {
+func produce(ctx context.Context, dataCh <-chan *msclient.WrapKanban, kafkaConf *kafkaConfig) {
 	childCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -61,7 +61,7 @@ func produce(ctx context.Context, dataCh <-chan *msclient.WrapKanban, addr strin
 	config.Producer.Return.Successes = true
 	config.Producer.Retry.Max = 5
 
-	producer, err := sarama.NewAsyncProducer([]string{addr}, config)
+	producer, err := sarama.NewAsyncProducer([]string{kafkaConf.addr}, config)
 	if err != nil {
 		log.Fatalf("%v\n", err)
 	}
@@ -117,7 +117,7 @@ func main() {
 	signal.Notify(signalCh, syscall.SIGTERM)
 
 	kafkaCh := make(chan *msclient.WrapKanban)
-	go produce(ctx, kafkaCh, config.kafkaAddr)
+	go produce(ctx, kafkaCh, config)
 
 	for {
 		select {

@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-client
+  labels:
+    app: kafka-client
+spec:
+  selector:
+    matchLabels:
+      app: kafka-client
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: kafka-client
+    spec:
+      containers:
+        - image: latonaio/kafka-client:latest
+          name: kafka-client
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: KAFKA_SERVER
+              value: "kafka-server-001-srv:9092"
+            - name: KAFKA_TOPIC
+              value: "Test.A"
+            - name: KAFKA_PARTITION
+              value: "0"
+          resources:
+            limits:
+              cpu: "0.5"
+              memory: "100Mi"
+            requests:
+              cpu: "0.25"
+              memory: "50Mi"
+
