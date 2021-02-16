@@ -52,73 +52,70 @@ func kanbanToKafkaMsg(kanban *msclient.WrapKanban) (*kafkaMsg, error) {
 	}, nil
 }
 
-func produce(ctx context.Context, dataCh <-chan *msclient.WrapKanban, kafkaConf *kafkaConfig) {
-	childCtx, cancel := context.WithCancel(ctx)
+func produce(ctx context.Context, dataCh <-chan *msclient.WrapKanban, producer sarama.AsyncProducer) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-producer.Successes():
+			log.Printf("success send")
+		case <-producer.Errors():
+			log.Printf("failed send")
+		case data := <-dataCh:
+			log.Printf("received data: %v\n", data)
+			kmsg, err := kanbanToKafkaMsg(data)
+			if err != nil {
+				log.Printf("%v\n", err)
+			}
+			c, err := json.Marshal(kmsg.content)
+			if err != nil {
+				log.Printf("cannot convert json")
+			}
+			msg := &sarama.ProducerMessage{
+				Topic: kmsg.topic,
+				Key:   sarama.StringEncoder(kmsg.key),
+				Value: sarama.StringEncoder(c),
+			}
+			producer.Input() <- msg
+		}
+	}
+}
+
+func main() {
+	kConfig := &kafkaConfig{}
+	if err := envconfig.Process("", &kConfig); err != nil {
+		log.Fatal("cannot load environment")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	c, err := msclient.NewKanbanClient(ctx)
+	if err != nil {
+		log.Fatalf("%v\n", err)
+	}
+
+	kanbanCh, err := c.GetKanbanCh(msName, c.GetProcessNumber())
+	if err != nil {
+		log.Fatalf("%v\n", err)
+	}
 
 	config := sarama.NewConfig()
 	config.Producer.Return.Errors = true
 	config.Producer.Return.Successes = true
 	config.Producer.Retry.Max = 5
 
-	producer, err := sarama.NewAsyncProducer([]string{kafkaConf.addr}, config)
+	producer, err := sarama.NewAsyncProducer([]string{kConfig.addr}, config)
 	if err != nil {
 		log.Fatalf("%v\n", err)
 	}
 	defer producer.AsyncClose()
 
-	go func() {
-		for {
-			select {
-			case <-childCtx.Done():
-				return
-			case <-producer.Successes():
-				log.Printf("success send")
-			case <-producer.Errors():
-				log.Printf("failed send")
-			case data := <-dataCh:
-				log.Printf("received data: %v\n", data)
-				kmsg, err := kanbanToKafkaMsg(data)
-				if err != nil {
-					log.Printf("%v\n", err)
-				}
-				c, err := json.Marshal(kmsg.content)
-				if err != nil {
-					log.Printf("cannot convert json")
-				}
-				msg := &sarama.ProducerMessage{
-					Topic: kmsg.topic,
-					Key:   sarama.StringEncoder(kmsg.key),
-					Value: sarama.StringEncoder(c),
-				}
-				producer.Input() <- msg
-			}
-		}
-	}()
-	<-ctx.Done()
-}
+	kafkaCh := make(chan *msclient.WrapKanban)
+	go produce(ctx, kafkaCh, producer)
 
-func main() {
-	config := &kafkaConfig{}
-	if err := envconfig.Process("", &config); err != nil {
-		log.Fatal("cannot load environment")
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	c, err := msclient.NewKanbanClient(ctx)
-	if err != nil {
-		log.Fatalf("%v\n", err)
-	}
-	kanbanCh, err := c.GetKanbanCh(msName, c.GetProcessNumber())
-	if err != nil {
-		log.Fatalf("%v\n", err)
-	}
 	signalCh := make(chan os.Signal)
 	signal.Notify(signalCh, syscall.SIGTERM)
-
-	kafkaCh := make(chan *msclient.WrapKanban)
-	go produce(ctx, kafkaCh, config)
-
 	for {
 		select {
 		case s := <-signalCh:
