@@ -15,14 +15,14 @@ spec:
         app: kafka-client
     spec:
       containers:
-        - image: latonaio/kafka-client:latest
+        - image: latonaio/kafka-consumer:latest
           name: kafka-client
           imagePullPolicy: IfNotPresent
           env:
             - name: KAFKA_SERVER
-              value: "kafka-server-001-srv:9092"
+              value: "kafka-0.kafka-service.default.svc.cluster.local:9092,kafka-1.kafka-service.default.svc.cluster.local:9092,kafka-2.kafka-service.default.svc.cluster.local:9092"
             - name: KAFKA_TOPIC
-              value: "Test.A"
+              value: "template-matching"
             - name: KAFKA_PARTITION
               value: "0"
           resources:

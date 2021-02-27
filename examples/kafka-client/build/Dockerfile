@@ -6,7 +6,7 @@ ENV GO111MODULE on
 ENV GOPRIVATE "bitbucket.org/latonaio"
 WORKDIR /go/src/bitbucket.org/latonaio
 
-COPY go.mod .
+COPY ../go.mod .
 
 RUN go mod download
 

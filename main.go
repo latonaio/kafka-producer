@@ -6,20 +6,20 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
-
-	"github.com/Shopify/sarama"
-	"github.com/kelseyhightower/envconfig"
-	"github.com/pkg/errors"
 
 	"bitbucket.org/latonaio/aion-core/pkg/go-client/msclient"
 	"bitbucket.org/latonaio/aion-core/pkg/log"
+	"github.com/Shopify/sarama"
+	"github.com/kelseyhightower/envconfig"
+	"github.com/pkg/errors"
 )
 
 var msName string = "kafka-producer"
 
-type kafkaConfig struct {
-	addr string `envconfig:"KAFKA_SERVER" default:"localhost:9092"`
+type KafkaConfig struct {
+	Addrs string `envconfig:"KAFKA_SERVER" default:"localhost:9092"`
 }
 
 type kafkaMsg struct {
@@ -82,10 +82,12 @@ func produce(ctx context.Context, dataCh <-chan *msclient.WrapKanban, producer s
 }
 
 func main() {
-	kConfig := &kafkaConfig{}
-	if err := envconfig.Process("", &kConfig); err != nil {
+	kConfig := &KafkaConfig{}
+	if err := envconfig.Process("", kConfig); err != nil {
 		log.Fatal("cannot load environment")
 	}
+	kafkaAddrs := strings.Split(kConfig.Addrs, ",")
+	log.Printf("kafka_server_addresses: %v", kafkaAddrs)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -101,11 +103,12 @@ func main() {
 	}
 
 	config := sarama.NewConfig()
+	config.Version = sarama.V0_11_0_2
 	config.Producer.Return.Errors = true
 	config.Producer.Return.Successes = true
 	config.Producer.Retry.Max = 5
 
-	producer, err := sarama.NewAsyncProducer([]string{kConfig.addr}, config)
+	producer, err := sarama.NewAsyncProducer(kafkaAddrs, config)
 	if err != nil {
 		log.Fatalf("%v\n", err)
 	}
@@ -114,7 +117,7 @@ func main() {
 	kafkaCh := make(chan *msclient.WrapKanban)
 	go produce(ctx, kafkaCh, producer)
 
-	signalCh := make(chan os.Signal)
+	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, syscall.SIGTERM)
 	for {
 		select {
@@ -122,7 +125,9 @@ func main() {
 			fmt.Printf("received signal: %s", s.String())
 			goto END
 		case k := <-kanbanCh:
-			kafkaCh <- k
+			if k != nil {
+				kafkaCh <- k
+			}
 		}
 	}
 END:

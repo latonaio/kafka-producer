@@ -43,7 +43,7 @@ kafka-producerをデプロイするには、project.ymlに以下の構成でサ�
     startup: yes
     always: yes
     env:
-      - KAFKA_SERVER: {your kafka service port}:{your kafka service port}
+      KAFKA_SERVER: {your kafka service port}:{your kafka service port}
 ```
 
 # IO
