@@ -92,12 +92,12 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	c, err := msclient.NewKanbanClient(ctx)
+	c, err := msclient.NewKanbanClient(ctx,msName)
 	if err != nil {
 		log.Fatalf("%v\n", err)
 	}
 
-	kanbanCh, err := c.GetKanbanCh(msName, c.GetProcessNumber())
+	kanbanCh, err := c.GetKanbanCh()
 	if err != nil {
 		log.Fatalf("%v\n", err)
 	}
